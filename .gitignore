@@ -17,3 +17,4 @@ data/
 checkpoints/*
 !checkpoints/
 !checkpoints/model_epoch_010.pth
+!checkpoints/mnist_gan.pth

@@ -12,6 +12,11 @@ RUN sh /uv-installer.sh && rm /uv-installer.sh
 
 # Ensure the installed binary is on the `PATH`
 ENV PATH="/root/.local/bin/:$PATH"
+ENV OMP_NUM_THREADS=1
+ENV MKL_NUM_THREADS=1
+ENV OPENBLAS_NUM_THREADS=1
+ENV NUMEXPR_NUM_THREADS=1
+ENV ATEN_CPU_CAPABILITY=default
 
 # Set the working directory
 WORKDIR /code
@@ -26,14 +31,8 @@ RUN uv run python -m spacy download en_core_web_lg
 
 # Copy the application code
 COPY ./app /code/app
+COPY ./helper_lib /code/helper_lib
 COPY main.py /code/
-COPY model.py /code/
-COPY data_loader.py /code/
-COPY trainer.py /code/
-COPY evaluator.py /code/
-COPY checkpoints.py /code/
-COPY utils.py /code/
-COPY generator.py /code/
 COPY ./checkpoints /code/checkpoints
 
 # Command to run the application

@@ -1,12 +1,17 @@
+from fastapi.responses import StreamingResponse
+from io import BytesIO
+from helper_lib.generator import generate_sample_image
 from fastapi import FastAPI, UploadFile, File
 from pydantic import BaseModel
 from PIL import Image
 import torch
+# torch.set_num_threads(1)
 import torchvision.transforms as transforms
 
-from app.bigram_model import BigramModel
+# from app.bigram_model import BigramModel
+from app.rnn_model import RNNTextGenerator
 from app.embedding_model import EmbeddingModel
-from model import get_model
+from helper_lib.model import get_model
 
 app = FastAPI()
 
@@ -18,7 +23,7 @@ corpus = [
     "bigram models are simple but effective",
 ]
 
-bigram_model = BigramModel(corpus)
+rnn_model = RNNTextGenerator(corpus)
 embedding_model = EmbeddingModel()
 
 class_names = [
@@ -47,6 +52,18 @@ except FileNotFoundError:
 cnn_model.to(device)
 cnn_model.eval()
 
+gan_model = get_model("GAN")
+gan_checkpoint_path = "checkpoints/mnist_gan.pth"
+
+try:
+    gan_checkpoint = torch.load(gan_checkpoint_path, map_location=device)
+    gan_model.load_state_dict(gan_checkpoint["model_state_dict"])
+except FileNotFoundError:
+    pass
+
+gan_model.to(device)
+gan_model.eval()
+
 image_transform = transforms.Compose([
     transforms.Resize((64, 64)),
     transforms.ToTensor(),
@@ -69,7 +86,13 @@ def read_root():
 
 @app.post("/generate")
 def generate_text(request: TextGenerationRequest):
-    generated_text = bigram_model.generate_text(request.start_word, request.length)
+    generated_text = rnn_model.generate_text(request.start_word, request.length)
+    return {"generated_text": generated_text}
+
+
+@app.post("/generate_with_rnn")
+def generate_with_rnn(request: TextGenerationRequest):
+    generated_text = rnn_model.generate_text(request.start_word, request.length)
     return {"generated_text": generated_text}
 
 
@@ -99,3 +122,12 @@ async def classify_image(file: UploadFile = File(...)):
         "predicted_class": class_names[predicted_index],
         "confidence": float(confidence.item()),
     }
+
+
+@app.get("/generate_digit")
+def generate_digit():
+    image = generate_sample_image(gan_model, device)
+    buffer = BytesIO()
+    image.save(buffer, format="PNG")
+    buffer.seek(0)
+    return StreamingResponse(buffer, media_type="image/png")
