@@ -1,7 +1,9 @@
 from fastapi.responses import StreamingResponse
 from io import BytesIO
+from pathlib import Path
+
 from helper_lib.generator import generate_sample_image
-from fastapi import FastAPI, UploadFile, File
+from fastapi import FastAPI, UploadFile, File, HTTPException
 from pydantic import BaseModel
 from PIL import Image
 import torch
@@ -11,6 +13,16 @@ import torchvision.transforms as transforms
 # from app.bigram_model import BigramModel
 from app.rnn_model import RNNTextGenerator
 from app.embedding_model import EmbeddingModel
+from app.energy_model import (
+    EnergyModel,
+    generate_energy_image,
+    load_energy_checkpoint,
+)
+from app.diffusion_model import (
+    create_diffusion_model,
+    generate_diffusion_image,
+    load_diffusion_checkpoint,
+)
 from helper_lib.model import get_model
 
 app = FastAPI()
@@ -40,8 +52,10 @@ class_names = [
 ]
 
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+project_dir = Path(__file__).resolve().parent
+
 cnn_model = get_model("CNN")
-checkpoint_path = "checkpoints/model_epoch_010.pth"
+checkpoint_path = project_dir / "checkpoints/model_epoch_010.pth"
 
 try:
     checkpoint = torch.load(checkpoint_path, map_location=device)
@@ -53,7 +67,7 @@ cnn_model.to(device)
 cnn_model.eval()
 
 gan_model = get_model("GAN")
-gan_checkpoint_path = "checkpoints/mnist_gan.pth"
+gan_checkpoint_path = project_dir / "checkpoints/mnist_gan.pth"
 
 try:
     gan_checkpoint = torch.load(gan_checkpoint_path, map_location=device)
@@ -63,6 +77,24 @@ except FileNotFoundError:
 
 gan_model.to(device)
 gan_model.eval()
+
+energy_model = EnergyModel().to(device)
+energy_checkpoint_path = project_dir / "checkpoints/energy_model.pth"
+energy_model_ready = load_energy_checkpoint(
+    energy_model,
+    energy_checkpoint_path,
+    device,
+)
+
+diffusion_model = create_diffusion_model().to(device)
+diffusion_checkpoint_path = (
+    project_dir / "checkpoints/diffusion_model.pth"
+)
+diffusion_model_ready = load_diffusion_checkpoint(
+    diffusion_model,
+    diffusion_checkpoint_path,
+    device,
+)
 
 image_transform = transforms.Compose([
     transforms.Resize((64, 64)),
@@ -127,6 +159,59 @@ async def classify_image(file: UploadFile = File(...)):
 @app.get("/generate_digit")
 def generate_digit():
     image = generate_sample_image(gan_model, device)
+    buffer = BytesIO()
+    image.save(buffer, format="PNG")
+    buffer.seek(0)
+    return StreamingResponse(buffer, media_type="image/png")
+
+
+@app.get("/generate_energy")
+def generate_energy(steps: int = 256, seed: int | None = None):
+    if not energy_model_ready:
+        raise HTTPException(
+            status_code=503,
+            detail="Energy model checkpoint is not available",
+        )
+    if steps < 1 or steps > 512:
+        raise HTTPException(
+            status_code=400,
+            detail="steps must be between 1 and 512",
+        )
+
+    image = generate_energy_image(
+        energy_model,
+        device,
+        steps=steps,
+        seed=seed,
+    )
+    buffer = BytesIO()
+    image.save(buffer, format="PNG")
+    buffer.seek(0)
+    return StreamingResponse(buffer, media_type="image/png")
+
+
+@app.get("/generate_diffusion")
+def generate_diffusion(
+    steps: int = 20,
+    seed: int | None = None,
+):
+    if not diffusion_model_ready:
+        raise HTTPException(
+            status_code=503,
+            detail="Diffusion model checkpoint is not available",
+        )
+    if steps < 1 or steps > 200:
+        raise HTTPException(
+            status_code=400,
+            detail="steps must be between 1 and 200",
+        )
+
+    image = generate_diffusion_image(
+        diffusion_model,
+        device,
+        diffusion_steps=steps,
+        seed=seed,
+    )
     buffer = BytesIO()
     image.save(buffer, format="PNG")
     buffer.seek(0)
