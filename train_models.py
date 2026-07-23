@@ -40,7 +40,7 @@ class SampleBuffer:
         self.model = model
         self.device = device
         self.examples = [
-            torch.rand((1, 1, 32, 32), device=device) * 2 - 1
+            torch.rand((1, 3, 32, 32), device=device) * 2 - 1
             for _ in range(128)
         ]
 
@@ -48,7 +48,7 @@ class SampleBuffer:
         number_new = np.random.binomial(batch_size, 0.05)
         new_images = (
             torch.rand(
-                (number_new, 1, 32, 32),
+                (number_new, 3, 32, 32),
                 device=self.device,
             ) * 2 - 1
         )
@@ -84,10 +84,12 @@ class SampleBuffer:
 def train_energy_model(device, epochs):
     transform = transforms.Compose([
         transforms.ToTensor(),
-        transforms.Normalize((0.5,), (0.5,)),
-        transforms.Pad(2, fill=-1),
+        transforms.Normalize(
+            (0.5, 0.5, 0.5),
+            (0.5, 0.5, 0.5),
+        ),
     ])
-    dataset = torchvision.datasets.MNIST(
+    dataset = torchvision.datasets.CIFAR10(
         root=DATA_DIR,
         train=True,
         download=True,
@@ -236,19 +238,18 @@ def diffusion_loss(model, images, loss_function, training):
 
 def train_diffusion_model(device, epochs):
     transform = transforms.Compose([
-        transforms.CenterCrop(340),
         transforms.Resize((64, 64)),
         transforms.ToTensor(),
     ])
-    train_dataset = torchvision.datasets.Flowers102(
+    train_dataset = torchvision.datasets.CIFAR10(
         root=DATA_DIR,
-        split="train",
+        train=True,
         download=True,
         transform=transform,
     )
-    validation_dataset = torchvision.datasets.Flowers102(
+    validation_dataset = torchvision.datasets.CIFAR10(
         root=DATA_DIR,
-        split="val",
+        train=False,
         download=True,
         transform=transform,
     )
@@ -352,7 +353,7 @@ def main():
         default="all",
     )
     parser.add_argument("--energy-epochs", type=int, default=10)
-    parser.add_argument("--diffusion-epochs", type=int, default=50)
+    parser.add_argument("--diffusion-epochs", type=int, default=2)
     args = parser.parse_args()
 
     set_seed()

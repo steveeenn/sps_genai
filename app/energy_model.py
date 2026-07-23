@@ -12,7 +12,7 @@ def swish(x):
 class EnergyModel(nn.Module):
     def __init__(self):
         super(EnergyModel, self).__init__()
-        self.conv1 = nn.Conv2d(1, 16, kernel_size=5, stride=2, padding=2)
+        self.conv1 = nn.Conv2d(3, 16, kernel_size=5, stride=2, padding=2)
         self.conv2 = nn.Conv2d(16, 32, kernel_size=3, stride=2, padding=1)
         self.conv3 = nn.Conv2d(32, 64, kernel_size=3, stride=2, padding=1)
         self.conv4 = nn.Conv2d(64, 64, kernel_size=3, stride=2, padding=1)
@@ -93,7 +93,7 @@ def generate_energy_image(
         generator.seed()
 
     image = torch.rand(
-        (1, 1, 32, 32),
+        (1, 3, 32, 32),
         device=device,
         generator=generator,
     ) * 2 - 1
@@ -107,6 +107,7 @@ def generate_energy_image(
         generator=generator,
     )
 
-    image = torch.clamp((image[0, 0] + 1) / 2, 0, 1)
+    image = torch.clamp((image[0] + 1) / 2, 0, 1)
+    image = image.permute(1, 2, 0)
     image = (image * 255).to(torch.uint8).cpu().numpy()
     return Image.fromarray(image)
